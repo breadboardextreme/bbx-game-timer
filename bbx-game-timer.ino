@@ -1,9 +1,9 @@
 #include <LedControl.h>
 
 // Hardware pins
-#define BTN_PIN 2
+#define BTN_PIN 4
 #define BUZZ_PIN 3
-#define LED_PIN 4
+#define LED_PIN 2
 #define DIN_PIN 12
 #define CLK_PIN 11
 #define CS_PIN 10
@@ -14,9 +14,14 @@
 #define BATT_CHECK_MS 10000
 #define LOW_BATT_TH 2.8f  // Voltage threshold
 
+// Display related
+#define HIGH_INTENSITY 12 // Max = 15
+#define LOW_INTENSITY 2
+
 // Available timer durations in seconds
-const int TIMES[] PROGMEM = {15,30,45,60,90,120,150,180,240,300};
-const int NUM_TIMES = 10;
+//const int TIMES[] PROGMEM = {15,30,45,60,90,120,150,180,240,300};
+const int TIMES[] = {15,30,45,60,90,120,180,240,300};
+const int NUM_TIMES = 9;
 
 // Application states
 enum State {
@@ -74,8 +79,9 @@ byte font[11][8] = {
   {0x07,0x01,0x02,0x02,0x02,0x00,0x00,0x00}, // 7
   {0x07,0x05,0x07,0x05,0x07,0x00,0x00,0x00}, // 8
   {0x07,0x05,0x07,0x01,0x07,0x00,0x00,0x00}, // 9
-  {0x00,0x05,0x03,0x07,0x04,0x00,0x00,0x00}  // m (4col low bits)
+  {0x02,0x02,0x04,0x00,0x00,0x00,0x00,0x00}  // prime (4col low bits)
 };
+#define CHAR_PRIME 10
 
 byte reverseBits(byte b) {
   b = ((b >> 1) & 0x55) | ((b << 1) & 0xAA);
@@ -193,7 +199,7 @@ void onTap() {
       selectedMode = DisplayMode((int(selectedMode) + 1) % 3);
       break;
     case RUNNING:
-      totalMs = pgm_read_dword(&TIMES[selectedTimeIdx]) * 1000UL;
+      totalMs = (unsigned long)pgm_read_word(&TIMES[selectedTimeIdx]) * 1000UL;
       startMs = millis();
       initSand();
       break;
@@ -206,14 +212,14 @@ void onLongPress() {
       currentState = SELECT_MODE;
       break;
     case SELECT_MODE:
-      totalMs = pgm_read_dword(&TIMES[selectedTimeIdx]) * 1000UL;
+      totalMs = (unsigned long)pgm_read_word(&TIMES[selectedTimeIdx]) * 1000UL;
       startMs = millis();
       initSand();
       currentState = RUNNING;
       Serial.print(F("Start ")); Serial.print(totalMs/1000); Serial.print("s mode "); Serial.println(selectedMode);
       break;
     case EXPIRED:
-      totalMs = pgm_read_dword(&TIMES[selectedTimeIdx]) * 1000UL;
+      totalMs = (unsigned long)pgm_read_word(&TIMES[selectedTimeIdx]) * 1000UL;
       startMs = millis();
       initSand();
       currentState = RUNNING;
@@ -223,10 +229,16 @@ void onLongPress() {
 
 void drawSetupTime(int secs) {
   lc.clearDisplay(0);
-  int tens = secs / 10;
-  int ones = secs % 10;
-  drawTwoDigits(tens, ones);
-  if ((millis() / 1000) % 2 == 0) lc.setRow(0, 7, 0xFF);
+  if (secs <= 90) {
+    int tens = secs / 10;
+    int ones = secs % 10;
+    drawTwoDigits(tens, ones);
+  } else {
+    int mins = secs / 60;
+    drawTwoDigits(mins, CHAR_PRIME);
+  }
+  lc.setIntensity(0, (millis() / 500) % 2 ? HIGH_INTENSITY : LOW_INTENSITY);
+//  if ((millis() / 1000) % 2 == 0) lc.setRow(0, 7, 0xFF);
 }
 
 void drawSetupMode(DisplayMode mode) {
@@ -237,9 +249,9 @@ void drawSetupMode(DisplayMode mode) {
     {0x08, 0x14, 0x22, 0x41, 0x00, 0x00, 0x00, 0x00}   // S
   };
   for (int r = 0; r < 8; r++) {
-    lc.setRow(0, r, modeIcons[int(mode)][r]);
+    lc.setRow(0, 7-r, reverseBits(modeIcons[int(mode)][r]));
   }
-  lc.setIntensity(0, (millis() / 500) % 2 ? 15 : 2);
+  lc.setIntensity(0, (millis() / 500) % 2 ? HIGH_INTENSITY : LOW_INTENSITY);
 }
 
 void updateDisplay(unsigned long now) {
