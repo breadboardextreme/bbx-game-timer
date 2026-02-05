@@ -54,17 +54,17 @@ LedControl lc = LedControl(DIN_PIN, CLK_PIN, CS_PIN, 1);
 
 // 8x8 font for digits 0-9 and 'm' (index 10)
 byte font[11][8] = {
-  {0x3C,0x42,0x42,0x42,0x42,0x42,0x3C,0x00}, // 0
-  {0x08,0x18,0x28,0x08,0x08,0x08,0x3E,0x00}, // 1
-  {0x3C,0x42,0x02,0x1C,0x20,0x42,0x3E,0x00}, // 2
-  {0x3E,0x02,0x1C,0x02,0x02,0x42,0x3C,0x00}, // 3
-  {0x04,0x0C,0x14,0x24,0x3E,0x04,0x04,0x00}, // 4
-  {0x3E,0x20,0x3C,0x02,0x02,0x42,0x3C,0x00}, // 5
-  {0x1C,0x20,0x3C,0x22,0x42,0x42,0x3C,0x00}, // 6
-  {0x3E,0x02,0x04,0x08,0x10,0x10,0x10,0x00}, // 7
-  {0x1C,0x22,0x22,0x1C,0x22,0x22,0x1C,0x00}, // 8
-  {0x1C,0x22,0x22,0x1E,0x02,0x42,0x3C,0x00}, // 9
-  {0x00,0x00,0x18,0x24,0x42,0x00,0x00,0x00}  // m (simple)
+  {0x07,0x05,0x05,0x05,0x07,0x00,0x00,0x00}, // 0 slim
+  {0x02,0x07,0x02,0x02,0x07,0x00,0x00,0x00}, // 1
+  {0x07,0x01,0x07,0x04,0x07,0x00,0x00,0x00}, // 2 slim
+  {0x07,0x01,0x07,0x01,0x07,0x00,0x00,0x00}, // 3
+  {0x05,0x05,0x07,0x01,0x01,0x00,0x00,0x00}, // 4 slim
+  {0x07,0x04,0x07,0x01,0x07,0x00,0x00,0x00}, // 5
+  {0x07,0x04,0x07,0x05,0x07,0x00,0x00,0x00}, // 6
+  {0x07,0x01,0x02,0x02,0x02,0x00,0x00,0x00}, // 7
+  {0x07,0x05,0x07,0x05,0x07,0x00,0x00,0x00}, // 8
+  {0x07,0x05,0x07,0x01,0x07,0x00,0x00,0x00}, // 9
+  {0x00,0x05,0x03,0x07,0x04,0x00,0x00,0x00}  // m
 };
 
 void setup() {
@@ -92,6 +92,16 @@ void setup() {
   delay(500);
   lc.clearDisplay(0);
 
+  // Orientation test: "42" fixed 5s
+  Serial.println(F("Test 42 display"));
+  drawTwoDigits(4, 2);
+  for(int row=0; row<8; row++) {
+    Serial.print(F("Row ")); Serial.print(row); Serial.print(F(": 0x")); Serial.println(font[4][row] & 0x07, HEX);
+    Serial.print(F("Row ")); Serial.print(row); Serial.print(F(": 0x")); Serial.println(font[2][row] & 0x07, HEX);
+  }
+  delay(5000);
+  lc.clearDisplay(0);
+
   Serial.println(F("Ready - Tap button to select time"));
 }
 
@@ -101,14 +111,15 @@ void loop() {
   // Always handle button input
   handleButton(now);
 
-  // Periodic battery check
+  // Periodic battery check (ignore <0.8V USB)
   if (now - lastBattMs > BATT_CHECK_MS) {
     battV = readBatteryVoltage();
     lastBattMs = now;
-    if (battV < LOW_BATT_TH && currentState != LOW_BATT) {
+    if (battV > 0.8f && battV < LOW_BATT_TH && currentState != LOW_BATT) {
       currentState = LOW_BATT;
       Serial.print(F("Low battery: ")); Serial.println(battV, 2);
     }
+    Serial.print(F("Battery: ")); Serial.println(battV, 2);
   }
 
   // State machine
@@ -261,12 +272,18 @@ void drawSetupMode(DisplayMode mode) {
   for (int r = 0; r < 8; r++) {
     lc.setRow(0, r, modeIcons[static_cast<int>(mode)][r]);
   }
-  // Flash entire display
+  // Flash entire display (flip rows too)
   static unsigned long flashMs = 0;
   if ((millis() / 500) % 2 == 0) {
     lc.setIntensity(0, 2);  // Dim
   } else {
     lc.setIntensity(0, 15); // Bright
+  }
+  // Flip mode icons rows for consistency
+  byte flippedIcons[3][8];
+  for(int m=0; m<3; m++) for(int r=0; r<8; r++) flippedIcons[m][r] = modeIcons[m][7-r];
+  for (int r = 0; r < 8; r++) {
+    lc.setRow(0, r, flippedIcons[static_cast<int>(mode)][r]);
   }
 }
 
@@ -300,15 +317,16 @@ void updateDisplay(unsigned long now) {
       int pixels = static_cast<int>(progress * 32);
       int fullCols = pixels / 4;
       int remPx = pixels % 4;
-      // Rows 2-5 for bar
-      for (int c = 0; c < fullCols; c++) {
-        for (int rr = 0; rr < 4; rr++) {
-          lc.setLed(0, 2 + rr, c, true);
-        }
-      }
-      for (int rr = 0; rr < remPx; rr++) {
-        lc.setLed(0, 2 + rr, fullCols, true);
-      }
+  // Rows 2-5 for bar, LR reverse col
+  for (int c = 0; c < fullCols; c++) {
+    for (int rr = 0; rr < 4; rr++) {
+      lc.setLed(0, 7 - (2 + rr), 7 - c, true);  // Flip row/col
+    }
+  }
+  for (int rr = 0; rr < remPx; rr++) {
+    lc.setLed(0, 7 - (2 + rr), 7 - fullCols, true);
+  }
+
       break;
     }
     case SAND: {
@@ -317,43 +335,50 @@ void updateDisplay(unsigned long now) {
         moveOneGrain();
         lastStepMs = now;
       }
-      // Draw sand grid
-      for (int r = 0; r < 8; r++) {
-        lc.setRow(0, r, sandRows[r]);
-      }
+  // Draw sand grid flipped LR
+  for (int r = 0; r < 8; r++) {
+    lc.setRow(0, 7 - r, reverseBits(sandRows[r]));
+  }
+
       break;
     }
   }
 }
 
 /**
- * Pack two 4-bit nibble digits into rows (left digit bits7-4, right 3-0)
+ * Pack two 3col digits: left cols0-2 (bits0-2), col3 blank, right cols4-6 (bits4-6)
  */
+byte reverseBits(byte b) {
+  b = ((b >> 1) & 0x55) | ((b << 1) & 0xAA);
+  b = ((b >> 2) & 0x33) | ((b << 2) & 0xCC);
+  b = ((b >> 4) & 0x0F) | ((b << 4) & 0xF0);
+  return b;
+}
+
 void drawTwoDigits(int leftDig, int rightDig) {
   for (int row = 0; row < 8; row++) {
-    byte leftNib = font[leftDig][row] >> 4;
-    byte rightNib = font[rightDig][row] & 0x0F;
-    lc.setRow(0, row, (leftNib << 4) | rightNib);
+    byte bits = ((font[leftDig][row] & 0x07) << 4) | ((font[rightDig][row] & 0x07) );
+    lc.setRow(0, 7-row, reverseBits(bits));  // Flip top + LR reverse
   }
 }
 
 /**
- * Draw single digit left side (cols 0-3)
+ * Draw single digit left side (cols 0-2)
  */
 void drawDigitLeft(int dig) {
   for (int row = 0; row < 8; row++) {
-    byte nib = font[dig][row] >> 4;
-    lc.setRow(0, row, nib << 4);
+    byte bits = (font[dig][row] & 0x07) << 4;  // Match working left shift
+    lc.setRow(0, 7-row, reverseBits(bits));
   }
 }
 
 /**
- * Draw 'm' right side (cols 4-7)
+ * Draw 'm' right side (cols 3-6, 4col)
  */
 void drawMRight() {
   for (int row = 0; row < 8; row++) {
-    byte nib = font[10][row] & 0x0F;
-    lc.setRow(0, row, nib);
+    byte bits = font[10][row] & 0x07;  // Match right mask (3bit for consistency)
+    lc.setRow(0, 7-row, reverseBits(bits));
   }
 }
 
@@ -392,17 +417,17 @@ void drawBatteryLow(unsigned long now) {
   lc.clearDisplay(0);
   // Battery outline + low level (adjust bars for level if desired)
   byte battIcon[8] = {
-    0x3C,  // 01111100 top
-    0x42,  // 01000010 sides
-    0x81,  // 10000001 side + low bar start
-    0x81,  // low bar
-    0x81,  // low bar
-    0x42,  // sides
-    0x3C,  // bottom
+    0x3C,  // top (flipped LR if needed)
+    0x42,
+    0x81,
+    0x81,
+    0x81,
+    0x42,
+    0x3C,
     0x00
   };
   for (int r = 0; r < 8; r++) {
-    lc.setRow(0, r, battIcon[r]);
+    lc.setRow(0, 7 - r, reverseBits(battIcon[r]));
   }
   // Blink intensity
   lc.setIntensity(0, ((now / 500) % 2) ? 15 : 2);
