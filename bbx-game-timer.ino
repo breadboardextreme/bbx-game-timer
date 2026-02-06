@@ -17,6 +17,7 @@
 // Display related
 #define HIGH_INTENSITY 12 // Max = 15
 #define LOW_INTENSITY 2
+#define STD_INTENSITY 8
 
 // Available timer durations in seconds
 //const int TIMES[] PROGMEM = {15,30,45,60,90,120,150,180,240,300};
@@ -34,15 +35,17 @@ enum State {
 
 // Display modes
 enum DisplayMode {
-  NUMERIC,
+  NUMERIC = 0,
   PROGBAR,
-  SAND
+  SAND,
+  MODE_COUNT
 };
 
 // Function prototypes
 void drawTwoDigits(int leftDig, int rightDig);
-void drawDigitLeft(int dig);
-void drawMRight();
+// void drawDigitLeft(int dig);
+// void drawMRight();
+void drawNumeric(int secs);
 void initSand();
 void moveOneGrain();
 void drawBatteryLow(unsigned long now);
@@ -52,7 +55,7 @@ void drawSetupMode(DisplayMode mode);
 // Global state variables
 State currentState = SELECT_TIME;
 int selectedTimeIdx = 1;  // Default 30s (index 1)
-DisplayMode selectedMode = NUMERIC;
+volatile DisplayMode selectedMode = NUMERIC;
 long totalMs;
 long startMs;
 long remainingMs;
@@ -63,11 +66,13 @@ float battV = 3.2f;
 long lastStepMs = 0;
 long tickMs;
 byte sandRows[8];  // Bitmask for sand simulation (bit 7 = col 0 left)
+int sandMoved;
 
 // MAX7219 instance
 LedControl lc = LedControl(DIN_PIN, CLK_PIN, CS_PIN, 1);
 
 // Compact 3x5 font (cols0-2 left, col3 blank, cols4-6 right)
+#define FONT_ROWS 6
 byte font[11][8] = {
   {0x07,0x05,0x05,0x05,0x07,0x00,0x00,0x00}, // 0
   {0x02,0x06,0x02,0x02,0x07,0x00,0x00,0x00}, // 1
@@ -79,7 +84,7 @@ byte font[11][8] = {
   {0x07,0x01,0x02,0x02,0x02,0x00,0x00,0x00}, // 7
   {0x07,0x05,0x07,0x05,0x07,0x00,0x00,0x00}, // 8
   {0x07,0x05,0x07,0x01,0x07,0x00,0x00,0x00}, // 9
-  {0x02,0x02,0x04,0x00,0x00,0x00,0x00,0x00}  // prime (4col low bits)
+  {0x01,0x02,0x04,0x00,0x00,0x00,0x00,0x00}  // prime (4col low bits)
 };
 #define CHAR_PRIME 10
 
@@ -100,7 +105,7 @@ void setup() {
   pinMode(BUZZ_PIN, OUTPUT);
 
   lc.shutdown(0, false);
-  lc.setIntensity(0, 8);
+  lc.setIntensity(0, STD_INTENSITY);
   lc.clearDisplay(0);
 
   // All on test
@@ -196,7 +201,7 @@ void onTap() {
       selectedTimeIdx = (selectedTimeIdx + 1) % NUM_TIMES;
       break;
     case SELECT_MODE:
-      selectedMode = DisplayMode((int(selectedMode) + 1) % 3);
+      selectedMode = DisplayMode((int(selectedMode) + 1) % MODE_COUNT);
       break;
     case RUNNING:
       totalMs = (unsigned long) TIMES[selectedTimeIdx] * 1000UL;
@@ -256,83 +261,99 @@ void drawSetupMode(DisplayMode mode) {
 
 void updateDisplay(unsigned long now) {
   lc.clearDisplay(0);
-  lc.setIntensity(0, 8);
+  lc.setIntensity(0, STD_INTENSITY);
 
-  switch (selectedMode) {
-    case NUMERIC:
-      int secs = remainingMs / 1000UL;
-      if (secs <= 90) {
-        int tens = secs / 10;
-        int ones = secs % 10;
-        drawTwoDigits(tens, ones);
-      } else {
-        int mins = secs / 60;
-        drawDigitLeft(mins);
-        drawMRight();
-      }
-      break;
-    case PROGBAR:
+  if (selectedMode == NUMERIC) {
+    int secs = remainingMs / 1000UL;
+      drawNumeric(secs);
+  } else if(selectedMode == PROGBAR) {
+      lc.setRow(0, 0, 0xFF);
       unsigned long elapsedMs = totalMs - remainingMs;
-      int pixels = (elapsedMs * 32UL) / totalMs;
+      int pixels = ((elapsedMs * 32UL) / totalMs) + 1;
+      pixels = (pixels > 32) ? 32 : pixels;
       int fullCols = pixels / 4;
       int remPx = pixels % 4;
-      for (int c = 0; c < fullCols; c++) {
-        for (int rr = 0; rr < 4; rr++) {
-          lc.setLed(0, 2 + rr, c, true);
+      int fullrow = 0x00FF << (7 - fullCols);
+      int partrow = 0x00FF << (8 - fullCols);
+      for (int r = 0; r < 4; r++) {
+        if (r < remPx) {
+          lc.setRow(0, 5-r, reverseBits(fullrow));
+        } else {
+          lc.setRow(0, 5-r, reverseBits(partrow));
         }
       }
-      for (int rr = 0; rr < remPx; rr++) {
-        lc.setLed(0, 2 + rr, fullCols, true);
-      }
-      break;
-    case SAND:
-      if (now - lastStepMs >= tickMs) {
+      // for (int c = 0; c < fullCols; c++) {
+      //   for (int rr = 0; rr < 4; rr++) {
+      //     lc.setLed(0, 2 + rr, c, true);
+      //   }
+      // }
+      // for (int rr = 0; rr < remPx; rr++) {
+      //   lc.setLed(0, 2 + rr, fullCols, true);
+      // }
+  } else if(selectedMode == SAND) {
+      unsigned long elapsedMs = totalMs - remainingMs;
+      int moves = ((elapsedMs * 128UL) / totalMs) + 1;
+      moves = (moves > 128) ? 128 : moves;
+      if (moves > sandMoved) {
         moveOneGrain();
-        lastStepMs = now;
+        ++sandMoved;
       }
       for (int r = 0; r < 8; r++) {
-        lc.setRow(0, r, sandRows[r]);
+        lc.setRow(0, 7-r, reverseBits(sandRows[r]));
       }
-      break;
+  }
+}
+
+void drawNumeric(int secs) {
+  if (secs <= 90) {
+    int tens = secs / 10;
+    int ones = secs % 10;
+    drawTwoDigits(tens, ones);
+  } else {
+    int mins = secs / 60;
+    drawTwoDigits(mins, CHAR_PRIME);
   }
 }
 
 void drawTwoDigits(int leftDig, int rightDig) {
-  for (int row = 0; row < 8; row++) {
+  for (int row = 0; row < FONT_ROWS; row++) {
     byte bits = ((font[leftDig][row] & 0x07) << 4) | ((font[rightDig][row] & 0x07));
     lc.setRow(0, 7-row, reverseBits(bits));
   }
 }
 
-void drawDigitLeft(int dig) {
-  for (int row = 0; row < 8; row++) {
-    byte bits = (font[dig][row] & 0x07) << 4;
-    lc.setRow(0, 7-row, reverseBits(bits));
-  }
-}
+// void drawDigitLeft(int dig) {
+//   for (int row = 0; row < 8; row++) {
+//     byte bits = (font[dig][row] & 0x07) << 4;
+//     lc.setRow(0, 7-row, reverseBits(bits));
+//   }
+// }
 
-void drawMRight() {
-  for (int row = 0; row < 8; row++) {
-    byte bits = font[10][row] & 0x07;
-    lc.setRow(0, 7-row, reverseBits(bits));
-  }
-}
+// void drawMRight() {
+//   for (int row = 0; row < 8; row++) {
+//     byte bits = font[10][row] & 0x07;
+//     lc.setRow(0, 7-row, reverseBits(bits));
+//   }
+// }
 
 void initSand() {
   tickMs = totalMs / 128UL;
   lastStepMs = millis();
   memset(sandRows, 0, sizeof(sandRows));
   for (int r = 0; r < 4; r++) sandRows[r] = 0xFF;
+  sandMoved = 0;
 }
 
 void moveOneGrain() {
-  int col = random(8);
-  byte mask = 1 << (7 - col);
-  for (int row = 3; row >= 0; row--) {
-    if (sandRows[row] & mask) {
-      sandRows[row] &= ~mask;
-      sandRows[row + 1] |= mask;
-      return;
+  while ((sandRows[7] & sandRows[6] & sandRows[5] & sandRows[4]) != 0xFF) {
+    int col = random(8);
+    byte mask = 1 << (7 - col);
+    for (int row = 6; row >= 0; row--) {
+      if (sandRows[row] & mask && !(sandRows[row + 1] & mask)) {
+        sandRows[row] &= ~mask;
+        sandRows[row + 1] |= mask;
+        return;
+      }
     }
   }
 }
@@ -341,5 +362,5 @@ void drawBatteryLow(unsigned long now) {
   lc.clearDisplay(0);
   byte battIcon[8] = {0x3C,0x42,0x81,0x81,0x81,0x42,0x3C,0x00};
   for (int r = 0; r < 8; r++) lc.setRow(0, r, battIcon[r]);
-  lc.setIntensity(0, (now / 500) % 2 ? 15 : 2);
+  lc.setIntensity(0, (now / 500) % 2 ? HIGH_INTENSITY : LOW_INTENSITY);
 }
