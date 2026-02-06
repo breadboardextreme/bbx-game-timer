@@ -53,15 +53,15 @@ void drawSetupMode(DisplayMode mode);
 State currentState = SELECT_TIME;
 int selectedTimeIdx = 1;  // Default 30s (index 1)
 DisplayMode selectedMode = NUMERIC;
-unsigned long totalMs;
-unsigned long startMs;
-unsigned long remainingMs;
-unsigned long pressStartMs = 0;
+long totalMs;
+long startMs;
+long remainingMs;
+long pressStartMs = 0;
 bool buttonPressed = false;
-unsigned long lastBattMs = 0;
+long lastBattMs = 0;
 float battV = 3.2f;
-unsigned long lastStepMs = 0;
-unsigned long tickMs;
+long lastStepMs = 0;
+long tickMs;
 byte sandRows[8];  // Bitmask for sand simulation (bit 7 = col 0 left)
 
 // MAX7219 instance
