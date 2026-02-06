@@ -109,10 +109,10 @@ void setup() {
   lc.clearDisplay(0);
 
   // "42" test
-  Serial.println(F("Test 42"));
-  drawTwoDigits(4, 2);
-  delay(3000);
-  lc.clearDisplay(0);
+  // Serial.println(F("Test 42"));
+  // drawTwoDigits(4, 2);
+  // delay(3000);
+  // lc.clearDisplay(0);
 
   Serial.println(F("Ready"));
 }
@@ -243,10 +243,10 @@ void drawSetupTime(int secs) {
 
 void drawSetupMode(DisplayMode mode) {
   lc.clearDisplay(0);
-  byte modeIcons[3][8] = {
-    {0x7F, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00},  // N
-    {0x10, 0x10, 0x10, 0x10, 0x1F, 0x00, 0x00, 0x00},  // P bar
-    {0x08, 0x14, 0x22, 0x41, 0x00, 0x00, 0x00, 0x00}   // S
+  byte modeIcons[3][8] = {    
+    {0x24, 0x24, 0xFF, 0x24, 0x24, 0xFF, 0x24, 0x24},  // #
+    {0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00},  // horiz rect
+    {0xFF, 0x7E, 0x3C, 0x18, 0x18, 0x3C, 0x7E, 0xFF}   // hourglass
   };
   for (int r = 0; r < 8; r++) {
     lc.setRow(0, 7-r, reverseBits(modeIcons[int(mode)][r]));
