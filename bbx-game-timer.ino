@@ -199,7 +199,7 @@ void onTap() {
       selectedMode = DisplayMode((int(selectedMode) + 1) % 3);
       break;
     case RUNNING:
-      totalMs = (unsigned long)pgm_read_word(&TIMES[selectedTimeIdx]) * 1000UL;
+      totalMs = (unsigned long) TIMES[selectedTimeIdx] * 1000UL;
       startMs = millis();
       initSand();
       break;
@@ -212,14 +212,14 @@ void onLongPress() {
       currentState = SELECT_MODE;
       break;
     case SELECT_MODE:
-      totalMs = (unsigned long)pgm_read_word(&TIMES[selectedTimeIdx]) * 1000UL;
+      totalMs = (unsigned long)TIMES[selectedTimeIdx] * 1000UL;
       startMs = millis();
       initSand();
       currentState = RUNNING;
       Serial.print(F("Start ")); Serial.print(totalMs/1000); Serial.print("s mode "); Serial.println(selectedMode);
       break;
     case EXPIRED:
-      totalMs = (unsigned long)pgm_read_word(&TIMES[selectedTimeIdx]) * 1000UL;
+      totalMs = (unsigned long)TIMES[selectedTimeIdx] * 1000UL;
       startMs = millis();
       initSand();
       currentState = RUNNING;
