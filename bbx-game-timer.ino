@@ -12,7 +12,7 @@
 // Timing constants
 #define LONG_PRESS_MS 3000
 #define BATT_CHECK_MS 10000
-#define LOW_BATT_TH 2.8f  // Voltage threshold
+#define LOW_BATT_TH (2*1.05f)  // Voltage threshold
 
 // Display related
 #define HIGH_INTENSITY 12 // Max = 15
@@ -360,7 +360,7 @@ void moveOneGrain() {
 
 void drawBatteryLow(unsigned long now) {
   lc.clearDisplay(0);
-  byte battIcon[8] = {0x3C,0x42,0x81,0x81,0x81,0x42,0x3C,0x00};
-  for (int r = 0; r < 8; r++) lc.setRow(0, r, battIcon[r]);
+  byte battIcon[8] = {0x00,0xFE,0x83,0x81,0x83,0xFE,0x00,0x00};
+  for (int r = 0; r < 8; r++) lc.setRow(0, 7-r, reverseBits(battIcon[r]));
   lc.setIntensity(0, (now / 500) % 2 ? HIGH_INTENSITY : LOW_INTENSITY);
 }
